@@ -62,11 +62,14 @@ export const calculateQuoteTotals = (
   generalDiscount: number = 0,
 ) => {
   const homeProducts = products.filter(
-    (product) => product.efficiency === null,
+    (product) => product.efficiency === null && product.publicPrice !== null,
   );
   const cabineProducts = products.filter(
-    (product) => product.publicPrice === null,
+    (product) =>
+      product.publicPrice === null && product.profesionalPrice !== null,
   );
+  console.log('homeProducts: ', homeProducts);
+  console.log('cabineProducts: ', cabineProducts);
 
   const totalHome = homeProducts.reduce(
     (acc, prod) => {
@@ -77,7 +80,7 @@ export const calculateQuoteTotals = (
         totalToPay:
           acc.totalToPay +
           getProductPrice(
-            prod.profesionalPrice,
+            prod.profesionalPrice || 0,
             prod.quantity,
             prod.discount || 0,
             generalDiscount || 0,

@@ -19,11 +19,12 @@ export const quoteReport = (
     quoteInfo;
 
   const homeProducts = quoteProducts.filter(
-    (product) => product.publicPrice !== null,
+    (product) => product.efficiency === null && product.publicPrice !== null,
   );
 
   const cabineProducts = quoteProducts.filter(
-    (product) => product.publicPrice === null,
+    (product) =>
+      product.publicPrice === null && product.profesionalPrice !== null,
   );
 
   const { totalHome, profitability, totalCabine } = calculateQuoteTotals(
@@ -122,8 +123,8 @@ export const quoteReport = (
         text: `Nombre: ${name}\n
               Identificación: ${phone}\n
               Contacto: ${id}\n
-              Ciudad: ${city}\n
-              Campaña: ${campaign}\n`,
+              Ciudad: ${city || ''}\n
+              Campaña: ${campaign || ''}\n`,
         style: 'body',
       },
       {

@@ -75,7 +75,9 @@ export const tableCabineReport = (
       regularCell(
         property === 'publicPrice'
           ? currencyFormatter.format(Number(product.publicPrice))
-          : String(product.efficiency),
+          : product.efficiency
+            ? String(product.efficiency)
+            : '-',
       ),
       regularCell(currencyFormatter.format(Number(product.profesionalPrice))),
     ];
