@@ -1,5 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsString, IsArray, ValidateNested, IsObject } from 'class-validator';
+import {
+  IsString,
+  IsArray,
+  ValidateNested,
+  IsObject,
+  IsOptional,
+  IsNumber,
+} from 'class-validator';
 import { KitProductDto } from './kit-product.dto';
 
 class Protocol {
@@ -32,4 +39,11 @@ export class CreateKitDto {
   @ValidateNested()
   @Type(() => Protocol)
   protocol: Protocol;
+
+  @IsOptional()
+  @IsString()
+  imageLink?: string | null;
+
+  @IsNumber()
+  weight: number;
 }
