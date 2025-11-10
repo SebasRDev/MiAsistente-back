@@ -10,7 +10,7 @@ export class KitProduct {
   @Column('integer')
   quantity: number;
 
-  @ManyToOne(() => Kit, (kit) => kit.kitProducts)
+  @ManyToOne(() => Kit, (kit) => kit.kitProducts, { onDelete: 'CASCADE' })
   kit: Kit;
 
   @ManyToOne(() => Product, (product) => product.kitProducts)

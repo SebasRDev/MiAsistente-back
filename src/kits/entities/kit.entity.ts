@@ -31,6 +31,7 @@ export class Kit {
   @OneToMany(() => KitProduct, (kitProduct) => kitProduct.kit, {
     cascade: true,
     eager: true,
+    onDelete: 'CASCADE',
   })
   kitProducts: KitProduct[];
 
