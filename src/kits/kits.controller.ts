@@ -120,8 +120,6 @@ export class KitsController {
 
     if (!category || !kitName) return null;
 
-    console.log({ category, kitName });
-
     const products: KitProduct[] = [];
     const tips: string[] = [];
     const protocol: KitProtocol = { dia: [], noche: [] };
@@ -189,7 +187,6 @@ export class KitsController {
       }
       // Identificar protocolos de noche
       else if (nocheIndex !== -1 && i > nocheIndex) {
-        console.log(columns[6]);
         if (columns.length >= 7 && columns[6]?.includes('1.')) {
           protocol.noche = this.extractProtocolSteps(columns[6]);
         }
@@ -273,8 +270,7 @@ export class KitsController {
 
     try {
       filePath = file.path;
-      console.log('Processing Excel file:', file.originalname);
-      await this.kitsService.deleteAllKits();
+      // await this.kitsService.deleteAllKits();
 
       // Leer el archivo Excel
       const workbook = XLSX.readFile(filePath, {
@@ -356,7 +352,7 @@ export class KitsController {
       }
 
       // NUEVO: Usar sincronización completa (crear/actualizar/eliminar)
-      const result = await this.kitsService.bulkSyncKitsFromExcel(kitDtos);
+      const result = await this.kitsService.syncKitsFromExcel(kitDtos);
 
       return {
         message: 'Kits synchronized successfully with database',

@@ -115,7 +115,6 @@ export class ProductsController {
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      console.log('Processing Excel file:', file.originalname);
 
       // Leer el archivo Excel
       const workbook = XLSX.readFile(file.path, { type: 'buffer' });

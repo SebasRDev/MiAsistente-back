@@ -340,8 +340,10 @@ export class KitsService {
     };
 
     try {
-      // 1. Obtener TODOS los kits existentes en la BD
-      const allExistingKits = await queryRunner.manager.find(Kit);
+      // 1. Obtener TODOS los kits existentes en la BD CON sus relaciones
+      const allExistingKits = await queryRunner.manager.find(Kit, {
+        relations: ['kitProducts'],
+      });
 
       // 2. Extraer nombres de kits del Excel
       const excelKitNames = new Set(kitsData.map((kit) => kit.name));
@@ -358,18 +360,95 @@ export class KitsService {
 
           if (existingKit) {
             // Kit existe - ACTUALIZAR
-            const updatedKit = queryRunner.manager.merge(Kit, existingKit, {
-              ...kitData,
-              id: existingKit.id, // Mantener ID existente
+            // 1. Eliminar los KitProducts existentes
+            if (existingKit.kitProducts && existingKit.kitProducts.length > 0) {
+              await queryRunner.manager.remove(
+                KitProduct,
+                existingKit.kitProducts,
+              );
+            }
+
+            // 2. Buscar los productos por código
+            const products = await Promise.all(
+              kitData.products.map(async (product) => {
+                const productDB = await queryRunner.manager.findOne(Product, {
+                  where: { code: product.code },
+                });
+                if (!productDB) {
+                  throw new NotFoundException(
+                    'Product not found ' + product.code,
+                  );
+                }
+                return {
+                  productDB,
+                  quantity: product.quantity,
+                };
+              }),
+            );
+
+            // 3. Crear los nuevos KitProducts
+            const newKitProducts = products.map((product) => {
+              return queryRunner.manager.create(KitProduct, {
+                product: product.productDB,
+                quantity: product.quantity,
+                kit: existingKit,
+              });
             });
-            await queryRunner.manager.save(updatedKit);
+
+            // 4. Actualizar el kit con los nuevos datos
+            existingKit.category = kitData.category;
+            existingKit.name = kitData.name;
+            existingKit.tips = kitData.tips ?? null;
+            existingKit.protocol = kitData.protocol ?? null;
+            existingKit.imageLink = kitData.imageLink ?? null;
+            existingKit.weight = kitData.weight ?? null;
+            existingKit.kitProducts = newKitProducts;
+
+            await queryRunner.manager.save(Kit, existingKit);
             updated++;
             details.updatedKits.push(kitData.name);
             this.logger.log(`Updated kit: ${kitData.name}`);
           } else {
             // Kit nuevo - CREAR
-            const newKit = queryRunner.manager.create(Kit, kitData);
-            await queryRunner.manager.save(newKit);
+            this.logger.log(`Creating new kit: ${kitData.name}`);
+
+            // 1. Buscar los productos por código
+            const products = await Promise.all(
+              kitData.products.map(async (product) => {
+                const productDB = await queryRunner.manager.findOne(Product, {
+                  where: { code: product.code },
+                });
+                if (!productDB) {
+                  throw new NotFoundException(
+                    'Product not found ' + product.code,
+                  );
+                }
+                return {
+                  productDB,
+                  quantity: product.quantity,
+                };
+              }),
+            );
+
+            // 2. Crear el kit
+            const newKit = queryRunner.manager.create(Kit, {
+              category: kitData.category,
+              name: kitData.name,
+              tips: kitData.tips,
+              protocol: kitData.protocol,
+              imageLink: kitData.imageLink,
+              weight: kitData.weight,
+            });
+
+            // 3. Crear los KitProducts
+            newKit.kitProducts = products.map((product) => {
+              return queryRunner.manager.create(KitProduct, {
+                product: product.productDB,
+                quantity: product.quantity,
+              });
+            });
+
+            await queryRunner.manager.save(Kit, newKit);
             created++;
             details.createdKits.push(kitData.name);
             this.logger.log(`Created kit: ${kitData.name}`);
@@ -439,10 +518,13 @@ export class KitsService {
     await queryRunner.startTransaction();
 
     try {
+      const names = kitsData.map((kit) => kit.name);
       // 1. Obtener todos los kits existentes
-      const allExistingKits = await queryRunner.manager.find(Kit, {
-        select: ['id', 'name'],
-      });
+      const allExistingKits = await queryRunner.manager
+        .createQueryBuilder(Kit, 'kit')
+        .select(['kit.id', 'kit.name'])
+        .where('kit.name IN (:...names)', { names })
+        .getMany();
       console.log('All Existing Kits:', allExistingKits);
 
       // 2. Crear sets y maps para operaciones eficientes
