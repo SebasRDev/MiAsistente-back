@@ -9,6 +9,7 @@ export const formulaReport = (
   quoteInfo: Data,
   formulaProducts: Product[],
   kitData: Kit | null,
+  optimizedLogo?: string,
 ): TDocumentDefinitions => {
   const today = new Date();
   const formatedDate = formatDate(today);
@@ -225,23 +226,18 @@ export const formulaReport = (
     background: function () {
       return {
         canvas: [
-          {
-            type: 'rect',
-            x: 0,
-            y: 0,
-            w: 595.28,
-            h: 841.89,
-            color: '#F2EED4',
-          },
+          { type: 'rect', x: 0, y: 0, w: 595.28, h: 841.89, color: '#F2EED4' },
         ],
       };
     },
-    header: {
-      height: 150,
-      width: 150,
-      image: 'src/assets/logo_30_y.png',
-      margin: [20, 10],
-    },
+    header: optimizedLogo
+      ? {
+          height: 150,
+          width: 150,
+          image: 'src/assets/logo_30_y.png',
+          margin: [20, 10],
+        }
+      : undefined,
     content: [
       { text: 'Recomendación de tu profesional', style: 'title' },
       {

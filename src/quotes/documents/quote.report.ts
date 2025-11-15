@@ -11,6 +11,7 @@ import {
 export const quoteReport = (
   quoteInfo: Data,
   quoteProducts: Product[],
+  optimizedLogo?: string,
 ): TDocumentDefinitions => {
   const today = new Date();
   const formatedDate = formatDate(today);
@@ -89,6 +90,7 @@ export const quoteReport = (
 
   return {
     pageMargins: [40, 150, 40, 40],
+    // Background simplificado - usa color directo sin canvas
     background: function () {
       return {
         canvas: [
@@ -106,11 +108,13 @@ export const quoteReport = (
     header: {
       margin: [20, 10],
       columns: [
-        {
-          height: 150,
-          width: 150,
-          image: 'src/assets/logo_30_y.png',
-        },
+        optimizedLogo
+          ? {
+              height: 150,
+              width: 150,
+              image: optimizedLogo,
+            }
+          : '',
         {
           text: 'MARCA REGISTRADA DE LA\n EMPRESA CODEMFAR SAS\n nit 800233452-8',
           style: 'watermark',

@@ -13,6 +13,7 @@ import { Kit } from 'src/kits/entities/kit.entity';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { AxiosResponse } from 'axios';
+import { ImageOptimizerService } from 'src/common/services/image-optimizer.service';
 
 @Injectable()
 export class QuotesService {
@@ -27,6 +28,7 @@ export class QuotesService {
 
     private readonly printer: PrinterService,
     private readonly httpService: HttpService,
+    private readonly imageOptimizer: ImageOptimizerService,
   ) {}
 
   async getReport(quoteData: FormulaReport, type: 'formula' | 'quote') {
@@ -53,56 +55,54 @@ export class QuotesService {
       formulaKit = await this.kitRepository.findOneBy({ id: kit });
     }
 
-    let kitImageBase64: string | null = null;
+    // Optimizar imagen del kit si existe
     if (formulaKit && formulaKit.imageLink) {
-      // Si tenemos un kit y tiene link de imagen
       this.logger.log(
-        `Attempting to fetch image from: ${formulaKit.imageLink}`,
+        `Attempting to fetch and optimize image from: ${formulaKit.imageLink}`,
       );
       try {
-        // Typed as ArrayBuffer for clarity and type-safety
         const response: AxiosResponse<ArrayBuffer> = await firstValueFrom(
           this.httpService.get<ArrayBuffer>(formulaKit.imageLink, {
-            responseType: 'arraybuffer', // MUY IMPORTANTE para obtener datos binarios
+            responseType: 'arraybuffer',
           }),
         );
 
-        // Ensure proper typing when creating Buffer
         const buffer = Buffer.from(response.data);
 
-        // Convierte el Buffer a base64 y crea el Data URI
-        // Intenta detectar el tipo de imagen desde la URL o usa un default (ej: png)
-        let mimeType = 'image/png'; // Default
-        const extensionMatch = formulaKit.imageLink.match(
-          /\.(jpe?g|png|gif|webp)$/i,
-        );
-        if (extensionMatch && extensionMatch[1]) {
-          mimeType = `image/${extensionMatch[1].toLowerCase().replace('jpg', 'jpeg')}`;
-        }
-        kitImageBase64 = `data:${mimeType};base64,${buffer.toString('base64')}`;
+        // Optimizar la imagen con sharp
+        const optimizedBase64 =
+          await this.imageOptimizer.optimizeProductImage(buffer);
+
+        formulaKit.imageLink = optimizedBase64;
         this.logger.log(
-          `Successfully fetched and converted image for kit ${formulaKit.id}. MimeType: ${mimeType}`,
+          `Successfully fetched and optimized image for kit ${formulaKit.id}`,
         );
-        formulaKit.imageLink = kitImageBase64;
       } catch (error) {
-        // Type-safe error handling
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         this.logger.error(
-          `Failed to fetch or convert image from ${formulaKit.imageLink}: ${errorMessage}`,
+          `Failed to fetch or optimize image from ${formulaKit.imageLink}: ${errorMessage}`,
         );
-        // kitImageBase64 permanecerá null, el reporte se generará sin la imagen
+        // La imagen permanecerá sin optimizar, el reporte se generará sin ella
       }
     } else if (formulaKit && !formulaKit.imageLink) {
       this.logger.warn(`Kit ${formulaKit.id} found, but it has no imageLink.`);
     }
 
+    // Obtener el logo optimizado del printer
+    const optimizedLogo = this.printer.getCachedLogo();
+
     let docDefinition: any;
     if (type === 'formula') {
-      docDefinition = formulaReport(data, formulaProducts, formulaKit);
+      docDefinition = formulaReport(
+        data,
+        formulaProducts,
+        formulaKit,
+        optimizedLogo,
+      );
     }
     if (type === 'quote') {
-      docDefinition = quoteReport(data, formulaProducts);
+      docDefinition = quoteReport(data, formulaProducts, optimizedLogo);
     }
     return this.printer.createPdf(docDefinition);
   }
