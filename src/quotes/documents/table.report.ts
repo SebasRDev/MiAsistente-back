@@ -149,6 +149,8 @@ export const tableReport = (
     table: {
       widths: getTableWidths(),
       headerRows: 1,
+      dontBreakRows: true,
+      keepWithHeaderRows: 1,
       body: [
         getTableHeaders(),
         ...formulaProducts.map((prod) => getProductRow(prod, property)),
@@ -190,6 +192,7 @@ export const tableReport = (
     table: {
       headerRows: 1,
       widths: ['*', 'auto'],
+      dontBreakRows: true,
       body: [...getTotalRows()],
     },
     layout: 'noBorders',

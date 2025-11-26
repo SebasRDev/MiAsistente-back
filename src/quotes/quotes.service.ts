@@ -50,9 +50,13 @@ export class QuotesService {
     );
 
     // Only look for a kit if a kit ID is provided
+    // Cargar el kit con sus relaciones para poder validar productos
     let formulaKit: Kit | null = null;
     if (kit) {
-      formulaKit = await this.kitRepository.findOneBy({ id: kit });
+      formulaKit = await this.kitRepository.findOne({
+        where: { id: kit },
+        relations: ['kitProducts', 'kitProducts.product'],
+      });
     }
 
     // Optimizar imagen del kit si existe
@@ -89,20 +93,12 @@ export class QuotesService {
       this.logger.warn(`Kit ${formulaKit.id} found, but it has no imageLink.`);
     }
 
-    // Obtener el logo optimizado del printer
-    const optimizedLogo = this.printer.getCachedLogo();
-
     let docDefinition: any;
     if (type === 'formula') {
-      docDefinition = formulaReport(
-        data,
-        formulaProducts,
-        formulaKit,
-        optimizedLogo,
-      );
+      docDefinition = formulaReport(data, formulaProducts, formulaKit);
     }
     if (type === 'quote') {
-      docDefinition = quoteReport(data, formulaProducts, optimizedLogo);
+      docDefinition = quoteReport(data, formulaProducts);
     }
     return this.printer.createPdf(docDefinition);
   }

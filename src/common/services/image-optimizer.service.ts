@@ -8,9 +8,9 @@ export class ImageOptimizerService {
   /**
    * Optimiza una imagen para usar en PDFs
    * @param buffer - Buffer de la imagen original
-   * @param maxWidth - Ancho máximo (default: 300px)
-   * @param maxHeight - Alto máximo (default: 300px)
-   * @param quality - Calidad JPEG 1-100 (default: 80)
+   * @param maxWidth - Ancho máximo (default: 1500px)
+   * @param maxHeight - Alto máximo (default: 1500px)
+   * @param quality - Calidad JPEG 1-100 (default: 95)
    * @returns Data URI base64 optimizado
    */
   async optimizeForPdf(
@@ -23,14 +23,14 @@ export class ImageOptimizerService {
     },
   ): Promise<string> {
     const {
-      maxWidth = 300,
-      maxHeight = 300,
+      maxWidth = 1500,
+      maxHeight = 1500,
       quality = 95,
       format = 'jpeg',
     } = options || {};
 
     try {
-      let optimized = sharp(buffer).resize(maxWidth, maxHeight, {
+      const optimized = sharp(buffer).resize(maxWidth, maxHeight, {
         fit: 'inside',
         withoutEnlargement: true, // No agranda si es más pequeña
       });
@@ -50,7 +50,7 @@ export class ImageOptimizerService {
       } else {
         optimizedBuffer = await optimized
           .png({
-            compressionLevel: 2,
+            compressionLevel: 9,
             progressive: true,
           })
           .toBuffer();
@@ -78,25 +78,14 @@ export class ImageOptimizerService {
   }
 
   /**
-   * Optimiza el logo de la compañía
-   */
-  async optimizeLogo(buffer: Buffer): Promise<string> {
-    return this.optimizeForPdf(buffer, {
-      maxWidth: 150,
-      maxHeight: 150,
-      quality: 85,
-      format: 'png', // Los logos generalmente se ven mejor en PNG
-    });
-  }
-
-  /**
-   * Optimiza imágenes de productos/kits
+   * Optimiza imágenes de productos/kits con alta calidad
+   * Configuración para evitar imágenes borrosas manteniendo optimización
    */
   async optimizeProductImage(buffer: Buffer): Promise<string> {
     return this.optimizeForPdf(buffer, {
-      maxWidth: 400,
-      maxHeight: 400,
-      quality: 80,
+      maxWidth: 1200,
+      maxHeight: 1200,
+      quality: 92,
       format: 'jpeg', // Las fotos de productos se ven bien en JPEG
     });
   }
