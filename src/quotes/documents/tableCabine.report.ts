@@ -176,6 +176,8 @@ export const tableCabineReport = (
     table: {
       widths: getTableWidths(),
       headerRows: 1,
+      dontBreakRows: true,
+      keepWithHeaderRows: 1,
       body: [
         getTableHeaders(),
         ...formulaProducts.map((prod) => getProductRow(prod, property)),

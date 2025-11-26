@@ -88,7 +88,8 @@ export const quoteReport = (
   ]);
 
   return {
-    pageMargins: [40, 150, 40, 40],
+    pageMargins: [40, 150, 40, 50],
+    // Background simplificado - usa color directo sin canvas
     background: function () {
       return {
         canvas: [

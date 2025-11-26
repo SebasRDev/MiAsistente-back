@@ -7,10 +7,11 @@ import { Product } from 'src/products/entities/product.entity';
 import { ProductsModule } from 'src/products/products.module';
 import { KitsModule } from 'src/kits/kits.module';
 import { HttpModule } from '@nestjs/axios';
+import { ImageOptimizerService } from 'src/common/services/image-optimizer.service';
 
 @Module({
   controllers: [QuotesController],
-  providers: [QuotesService],
+  providers: [QuotesService, ImageOptimizerService],
   imports: [
     PrinterModule,
     TypeOrmModule.forFeature([Product]),

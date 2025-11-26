@@ -77,145 +77,157 @@ export const formulaReport = (
     marginBottom: 20,
   }));
 
-  const kitPageContent: Content[] = kitData
-    ? [
-        {
-          text: `${kitData.name}`,
-          style: 'title',
-          alignment: 'center',
-          pageBreak: 'before',
-          marginBottom: kitData.imageLink ? 20 : 30,
-          marginTop: kitData.imageLink ? 100 : 0,
-        },
-        kitData.imageLink
-          ? {
-              image: 'kit',
-              width: 300,
-              absolutePosition: {
-                x: 255,
-                y: 30,
-              },
-            }
-          : '',
-        {
-          columnGap: 20,
-          columns: [
-            [
-              {
-                marginBottom: 10,
-                marginTop: 10,
-                table: {
-                  widths: ['*'],
-                  body: [
-                    [
-                      {
-                        text: 'PRODUCTOS',
-                        border: [false, false, false, false],
-                        fillColor: '#D9D9D9',
-                        bold: true,
-                        alignment: 'center',
-                        margin: [2, 3],
-                      },
-                    ],
-                  ],
+  // Validar que todos los productos del kit estén presentes en la cotización
+  const allKitProductsIncluded = kitData
+    ? kitData.kitProducts.every((kitProduct) =>
+        formulaProducts.some(
+          (formulaProduct) => formulaProduct.id === kitProduct.product.id,
+        ),
+      )
+    : false;
+
+  // Solo mostrar la página del kit si existe Y todos sus productos están incluidos
+  const kitPageContent: Content[] =
+    kitData && allKitProductsIncluded
+      ? [
+          {
+            text: `${kitData.name}`,
+            style: 'title',
+            alignment: 'center',
+            pageBreak: 'before',
+            marginBottom: kitData.imageLink ? 20 : 30,
+            marginTop: kitData.imageLink ? 100 : 0,
+          },
+          kitData.imageLink
+            ? {
+                image: 'kit',
+                width: 300,
+                absolutePosition: {
+                  x: 255,
+                  y: 30,
                 },
-                layout: 'noBorders',
-              },
-              {
-                stack: formulaProducts.map((prod) => ({
-                  text: `- ${LowerCaseCapitalize(prod.name)}`,
-                  style: 'BenefitsBody',
-                })),
-              },
-              {
-                marginBottom: 10,
-                marginTop: 10,
-                table: {
-                  widths: ['*'],
-                  body: [
-                    [
-                      {
-                        text: 'TIPS',
-                        border: [false, false, false, false],
-                        fillColor: '#D9D9D9',
-                        alignment: 'center',
-                        bold: true,
-                        margin: [2, 3],
-                      },
+              }
+            : '',
+          {
+            columnGap: 20,
+            columns: [
+              [
+                {
+                  marginBottom: 10,
+                  marginTop: 10,
+                  table: {
+                    widths: ['*'],
+                    body: [
+                      [
+                        {
+                          text: 'PRODUCTOS',
+                          border: [false, false, false, false],
+                          fillColor: '#D9D9D9',
+                          bold: true,
+                          alignment: 'center',
+                          margin: [2, 3],
+                        },
+                      ],
                     ],
-                  ],
+                  },
+                  layout: 'noBorders',
                 },
-                layout: 'noBorders',
-              },
-              {
-                stack: kitData.tips.map((tip) => ({
-                  text: `${tip}`,
-                  style: 'BenefitsBody',
-                })),
-              },
+                {
+                  stack: formulaProducts.map((prod) => ({
+                    text: `- ${LowerCaseCapitalize(prod.name)}`,
+                    style: 'BenefitsBody',
+                  })),
+                },
+                {
+                  marginBottom: 10,
+                  marginTop: 10,
+                  table: {
+                    widths: ['*'],
+                    body: [
+                      [
+                        {
+                          text: 'TIPS',
+                          border: [false, false, false, false],
+                          fillColor: '#D9D9D9',
+                          alignment: 'center',
+                          bold: true,
+                          margin: [2, 3],
+                        },
+                      ],
+                    ],
+                  },
+                  layout: 'noBorders',
+                },
+                {
+                  stack: kitData.tips.map((tip) => ({
+                    text: `${tip}`,
+                    style: 'BenefitsBody',
+                  })),
+                },
+              ],
+              [
+                {
+                  marginBottom: 10,
+                  marginTop: 10,
+                  table: {
+                    widths: ['*'],
+                    body: [
+                      [
+                        {
+                          text: 'PROTOCOLOS',
+                          border: [false, false, false, false],
+                          fillColor: '#D9D9D9',
+                          alignment: 'center',
+                          bold: true,
+                          margin: [2, 3],
+                        },
+                      ],
+                    ],
+                  },
+                  layout: 'noBorders',
+                },
+                // Agrupamos el protocolo del día para evitar división
+                kitData.protocol.dia.length > 0
+                  ? {
+                      stack: [
+                        {
+                          text: 'DIA',
+                          style: 'BenefitsBody',
+                          bold: true,
+                        },
+                        ...kitData.protocol.dia.map((tip) => ({
+                          text: `- ${tip}`,
+                          style: 'BenefitsBody',
+                        })),
+                      ],
+                    }
+                  : '',
+                // Agrupamos el protocolo de la noche para evitar división
+                kitData.protocol.noche.length > 0
+                  ? {
+                      stack: [
+                        {
+                          text: 'NOCHE',
+                          style: 'BenefitsBody',
+                          bold: true,
+                        },
+                        ...kitData.protocol.noche.map((tip) => ({
+                          text: `- ${tip}`,
+                          style: 'BenefitsBody',
+                        })),
+                      ],
+                    }
+                  : '',
+              ],
             ],
-            [
-              {
-                marginBottom: 10,
-                marginTop: 10,
-                table: {
-                  widths: ['*'],
-                  body: [
-                    [
-                      {
-                        text: 'PROTOCOLOS',
-                        border: [false, false, false, false],
-                        fillColor: '#D9D9D9',
-                        alignment: 'center',
-                        bold: true,
-                        margin: [2, 3],
-                      },
-                    ],
-                  ],
-                },
-                layout: 'noBorders',
-              },
-              // Agrupamos el protocolo del día para evitar división
-              kitData.protocol.dia.length > 0
-                ? {
-                    stack: [
-                      {
-                        text: 'DIA',
-                        style: 'BenefitsBody',
-                        bold: true,
-                      },
-                      ...kitData.protocol.dia.map((tip) => ({
-                        text: `- ${tip}`,
-                        style: 'BenefitsBody',
-                      })),
-                    ],
-                  }
-                : '',
-              // Agrupamos el protocolo de la noche para evitar división
-              kitData.protocol.noche.length > 0
-                ? {
-                    stack: [
-                      {
-                        text: 'NOCHE',
-                        style: 'BenefitsBody',
-                        bold: true,
-                      },
-                      ...kitData.protocol.noche.map((tip) => ({
-                        text: `- ${tip}`,
-                        style: 'BenefitsBody',
-                      })),
-                    ],
-                  }
-                : '',
-            ],
-          ],
-        },
-      ]
-    : [];
+          },
+        ]
+      : [];
 
   // Define images object conditionally
+  // Solo incluir imagen si el kit tiene todos sus productos
   const documentImages = {};
-  if (kitData && kitData.imageLink) {
+  if (kitData && kitData.imageLink && allKitProductsIncluded) {
     documentImages['kit'] = kitData.imageLink;
   }
 
@@ -225,14 +237,7 @@ export const formulaReport = (
     background: function () {
       return {
         canvas: [
-          {
-            type: 'rect',
-            x: 0,
-            y: 0,
-            w: 595.28,
-            h: 841.89,
-            color: '#F2EED4',
-          },
+          { type: 'rect', x: 0, y: 0, w: 595.28, h: 841.89, color: '#F2EED4' },
         ],
       };
     },
@@ -265,7 +270,8 @@ export const formulaReport = (
       { text: 'BENEFICIOS PARA TU PIEL', style: 'title', marginBottom: 10 },
       // Ahora getBenefits ya contiene elementos con keepTogether
       ...getBenefits,
-      kitData ? kitPageContent : [],
+      // kitPageContent ya incluye la validación de productos completos
+      ...kitPageContent,
     ],
     images: documentImages,
     // Nuevo footer con tabla y línea roja
