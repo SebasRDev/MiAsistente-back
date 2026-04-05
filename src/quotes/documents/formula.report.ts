@@ -94,7 +94,6 @@ export const formulaReport = (
             text: `${kitData.name}`,
             style: 'title',
             alignment: 'center',
-            pageBreak: 'before',
             marginBottom: kitData.imageLink ? 20 : 30,
             marginTop: kitData.imageLink ? 100 : 0,
           },
@@ -248,6 +247,16 @@ export const formulaReport = (
       margin: [20, 10],
     },
     content: [
+      // kitPageContent ya incluye la validación de productos completos
+      ...kitPageContent,
+      {
+        text: 'BENEFICIOS PARA TU PIEL',
+        style: 'title',
+        marginBottom: 10,
+        pageBreak: 'before',
+      },
+      // Ahora getBenefits ya contiene elementos con keepTogether
+      ...getBenefits,
       { text: 'Recomendación de tu profesional', style: 'title' },
       {
         text: `Estimado/a ${name} a continuación ${consultant} especialista Skinhealth te hace la siguiente recomendación`,
@@ -265,13 +274,7 @@ export const formulaReport = (
             ${recommendations}`
           : '',
         style: 'body',
-        pageBreak: 'after',
       },
-      { text: 'BENEFICIOS PARA TU PIEL', style: 'title', marginBottom: 10 },
-      // Ahora getBenefits ya contiene elementos con keepTogether
-      ...getBenefits,
-      // kitPageContent ya incluye la validación de productos completos
-      ...kitPageContent,
     ],
     images: documentImages,
     // Nuevo footer con tabla y línea roja
