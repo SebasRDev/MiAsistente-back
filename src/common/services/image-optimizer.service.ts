@@ -48,9 +48,9 @@ export class ImageOptimizerService {
         optimizedBuffer = await optimized
           .jpeg({
             quality,
-            // progressive no aporta nada dentro de un PDF (PDFKit no renderiza
-            // de forma progresiva) y cuesta CPU; se omite a propósito.
-            mozjpeg: true, // Usa mozjpeg para mejor compresión
+            // mozjpeg disabled: its extra compression pass costs significant CPU
+            // and the savings (~10%) are imperceptible inside a PDF binary stream.
+            mozjpeg: false,
           })
           .toBuffer();
         mimeType = 'image/jpeg';
@@ -88,11 +88,16 @@ export class ImageOptimizerService {
    * Configuración para evitar imágenes borrosas manteniendo optimización
    */
   async optimizeProductImage(buffer: Buffer): Promise<string> {
+    // The kit image is rendered at width: 300pt in the PDF (A4 = 595.28pt).
+    // 600px provides 2× resolution for print quality — anything larger adds
+    // processing time without visible improvement in the final PDF.
+    // mozjpeg is disabled here because its CPU overhead outweighs the marginal
+    // compression gain for an image embedded in a binary PDF stream.
     return this.optimizeForPdf(buffer, {
-      maxWidth: 1200,
-      maxHeight: 1200,
-      quality: 92,
-      format: 'jpeg', // Las fotos de productos se ven bien en JPEG
+      maxWidth: 600,
+      maxHeight: 600,
+      quality: 80,
+      format: 'jpeg',
     });
   }
 }
