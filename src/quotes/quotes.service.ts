@@ -6,7 +6,7 @@ import { formulaReport } from './documents/formula.report';
 import FormulaReport from 'src/quotes/interfaces/formula.interface';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Product } from 'src/products/entities/product.entity';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { quoteReport } from 'src/quotes/documents/quote.report';
 import { Kit } from 'src/kits/entities/kit.entity';
 import { HttpService } from '@nestjs/axios';
@@ -50,20 +50,22 @@ export class QuotesService {
   async getReport(quoteData: FormulaReport, type: 'formula' | 'quote') {
     const { data, products, kit } = quoteData;
 
-    const formulaProducts = await Promise.all(
-      products.map(async (product) => {
-        const productDB = await this.productsRepository.findOneBy({
-          id: product.id,
-        });
-        if (!productDB)
-          throw new NotFoundException(`Product ${product.id} not found`);
-        return {
-          ...productDB,
-          quantity: product.quantity,
-          discount: product.discount,
-        };
-      }),
-    );
+    // Single query for all products instead of N individual queries.
+    const ids = products.map((p) => p.id);
+    const productRows = await this.productsRepository.findBy({ id: In(ids) });
+
+    const productMap = new Map(productRows.map((p) => [p.id, p]));
+
+    const formulaProducts = products.map((product) => {
+      const productDB = productMap.get(product.id);
+      if (!productDB)
+        throw new NotFoundException(`Product ${product.id} not found`);
+      return {
+        ...productDB,
+        quantity: product.quantity,
+        discount: product.discount,
+      };
+    });
 
     // Only look for a kit if a kit ID is provided
     // Cargar el kit con sus relaciones para poder validar productos
