@@ -1,6 +1,7 @@
 import { TDocumentDefinitions } from 'pdfmake/interfaces';
 import Product from 'src/products/interfaces/product.interface';
 import { tableCabineReport } from 'src/quotes/documents/tableCabine.report';
+import { LOGO_BASE64 } from 'src/quotes/documents/assets';
 import { Data } from 'src/quotes/interfaces/formula.interface';
 import {
   calculateQuoteTotals,
@@ -110,7 +111,7 @@ export const quoteReport = (
         {
           height: 150,
           width: 150,
-          image: 'src/assets/logo_30_y.png',
+          image: LOGO_BASE64,
         },
         {
           text: 'MARCA REGISTRADA DE LA\n EMPRESA CODEMFAR SAS\n nit 800233452-8',

@@ -2,6 +2,7 @@ import { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
 import { Kit } from 'src/kits/entities/kit.entity';
 import Product from 'src/products/interfaces/product.interface';
 import { tableReport } from 'src/quotes/documents/table.report';
+import { LOGO_BASE64 } from 'src/quotes/documents/assets';
 import { Data } from 'src/quotes/interfaces/formula.interface';
 import { formatDate, LowerCaseCapitalize } from 'src/quotes/utils/utils';
 
@@ -243,7 +244,7 @@ export const formulaReport = (
     header: {
       height: 150,
       width: 150,
-      image: 'src/assets/logo_30_y.png',
+      image: LOGO_BASE64,
       margin: [20, 10],
     },
     content: [
@@ -253,7 +254,10 @@ export const formulaReport = (
         text: 'BENEFICIOS PARA TU PIEL',
         style: 'title',
         marginBottom: 10,
-        pageBreak: 'before',
+        // Solo saltar de página si hubo página de kit antes; de lo contrario
+        // este sería el primer elemento del documento y generaría una hoja 1
+        // en blanco (el contenido empezaría en la página 2).
+        ...(kitPageContent.length > 0 ? { pageBreak: 'before' as const } : {}),
       },
       // Ahora getBenefits ya contiene elementos con keepTogether
       ...getBenefits,
