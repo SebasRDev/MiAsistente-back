@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import sharp from 'sharp';
 
+// Configuración global de sharp (memoria nativa de libvips, fuera del heap de V8).
+// Limita la caché y la concurrencia de threads para evitar crecimiento de memoria
+// nativa bajo carga concurrente.
+sharp.cache({ items: 20, memory: 50 });
+sharp.concurrency(2);
+
 @Injectable()
 export class ImageOptimizerService {
   private readonly logger = new Logger(ImageOptimizerService.name);
@@ -42,7 +48,8 @@ export class ImageOptimizerService {
         optimizedBuffer = await optimized
           .jpeg({
             quality,
-            progressive: true,
+            // progressive no aporta nada dentro de un PDF (PDFKit no renderiza
+            // de forma progresiva) y cuesta CPU; se omite a propósito.
             mozjpeg: true, // Usa mozjpeg para mejor compresión
           })
           .toBuffer();
@@ -51,7 +58,6 @@ export class ImageOptimizerService {
         optimizedBuffer = await optimized
           .png({
             compressionLevel: 9,
-            progressive: true,
           })
           .toBuffer();
         mimeType = 'image/png';
