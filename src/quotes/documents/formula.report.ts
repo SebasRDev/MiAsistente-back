@@ -248,24 +248,25 @@ export const formulaReport = (
       margin: [20, 10],
     },
     content: [
-      // kitPageContent ya incluye la validación de productos completos
-      ...kitPageContent,
-      {
-        text: 'BENEFICIOS PARA TU PIEL',
-        style: 'title',
-        marginBottom: 10,
-        // Solo saltar de página si hubo página de kit antes; de lo contrario
-        // este sería el primer elemento del documento y generaría una hoja 1
-        // en blanco (el contenido empezaría en la página 2).
-        ...(kitPageContent.length > 0 ? { pageBreak: 'before' as const } : {}),
-      },
-      // Ahora getBenefits ya contiene elementos con keepTogether
-      ...getBenefits,
       { text: 'Recomendación de tu profesional', style: 'title' },
       {
         text: `Estimado/a ${name} a continuación ${consultant} especialista Skinhealth te hace la siguiente recomendación`,
         style: 'body',
       },
+      {
+        text: 'BENEFICIOS PARA TU PIEL',
+        style: 'title',
+        marginBottom: 10,
+      },
+      // Ahora getBenefits ya contiene elementos con keepTogether
+      ...getBenefits,
+      { text: '', pageBreak: 'after' as const },
+      // kitPageContent ya incluye la validación de productos completos
+      ...kitPageContent,
+      ...(kitPageContent.length > 0
+        ? [{ text: '', pageBreak: 'after' as const }]
+        : []),
+      // Agregamos la tabla de resumen de precios al final del contenido
       tableReport(formulaProducts, quoteInfo.generalDiscount),
       {
         text: gift ? `Las cortesías por su compra son: ${gift}` : '',
