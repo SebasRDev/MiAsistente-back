@@ -248,13 +248,13 @@ export const formulaReport = (
       margin: [20, 10],
     },
     content: [
-      { text: 'Recomendación de tu profesional', style: 'title' },
+      { text: 'RECOMENDACIÓN DE TU PROFESIONAL', style: 'title' },
       {
         text: `Estimado/a ${name} a continuación ${consultant} especialista Skinhealth te hace la siguiente recomendación`,
         style: 'body',
       },
       {
-        text: 'BENEFICIOS PARA TU PIEL',
+        text: 'Beneficios para tu piel',
         style: 'title',
         marginBottom: 10,
       },
