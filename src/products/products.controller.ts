@@ -88,7 +88,6 @@ export class ProductsController {
           row.LEYENDA, // Nombre
       )
       .map((row, idx) => {
-        console.log('Mapping row:', row);
         return {
           code: row?.__EMPTY!.trim(),
           name: row?.LEYENDA!.trim(),
@@ -114,16 +113,12 @@ export class ProductsController {
     }
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-
       // Leer el archivo Excel
       const workbook = XLSX.readFile(file.path, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
       // sheet_to_json has a broad return type (unknown[]); assert the specific ExcelRow[] type for downstream processing
       const rawData = XLSX.utils.sheet_to_json<ExcelRow>(worksheet);
-
-      console.log(`Extracted ${rawData.length} rows from Excel file`);
 
       // Mapear datos del Excel al DTO
       const products = this.mapExcelToProductDto(rawData);
@@ -166,6 +161,7 @@ export class ProductsController {
         result: {
           ...result,
           details: {
+            ...result.details,
             homeProducts: homeProducts.length,
             cabinProducts: cabinProducts.length,
           },

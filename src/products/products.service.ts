@@ -9,18 +9,25 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from 'src/products/dto/update-product.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Product } from './entities/product.entity';
-import { DataSource, Repository } from 'typeorm';
+import { Kit } from 'src/kits/entities/kit.entity';
+import { KitProduct } from 'src/kits/entities/kit-product.entity';
+import { DataSource, In, Not, QueryRunner, Repository } from 'typeorm';
 import { validate as isUUID } from 'uuid';
 
 // Interface para el resultado de operaciones masivas
 interface BulkOperationResult {
   created: number;
   updated: number;
+  deleted: number;
   errors: Array<{ code: string; error: string }>;
   summary: {
     total: number;
     successful: number;
     failed: number;
+  };
+  details?: {
+    deletedProducts: string[];
+    affectedKits: string[];
   };
 }
 
@@ -105,6 +112,7 @@ export class ProductsService {
       return {
         created,
         updated,
+        deleted: 0,
         errors,
         summary: {
           total: productsData.length,
@@ -124,25 +132,40 @@ export class ProductsService {
   }
 
   // NUEVO: Método optimizado para grandes volúmenes
+  // Sincroniza la BD con el Excel: crea, actualiza y elimina productos que ya no aparezcan.
   async bulkUpsertProducts(
     productsData: CreateProductDto[],
   ): Promise<BulkOperationResult> {
+    if (productsData.length === 0) {
+      // Evita borrar todo el catálogo si el Excel llega vacío por error.
+      throw new BadRequestException(
+        'No products provided; refusing to run bulk upsert',
+      );
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      // Obtener códigos existentes
       const codes = productsData.map((p) => p.code.toUpperCase());
-      const existingProducts = await queryRunner.manager
-        .createQueryBuilder(Product, 'product')
-        .select(['product.id', 'product.code'])
-        .where('product.code IN (:...codes)', { codes })
-        .getMany();
+      const names = productsData.map((p) => p.name.trim());
 
-      const existingCodesMap = new Map(
-        existingProducts.map((p) => [p.code, p.id]),
-      );
+      // "code" y "name" son ambos únicos en la tabla, así que un producto ya
+      // existente puede haber cambiado de código en el nuevo catálogo: hay que
+      // buscarlo también por nombre para no intentar insertarlo como si fuera nuevo
+      // (lo que violaría la constraint única de "name").
+      const existingProducts =
+        codes.length > 0
+          ? await queryRunner.manager
+              .createQueryBuilder(Product, 'product')
+              .where('product.code IN (:...codes)', { codes })
+              .orWhere('product.name IN (:...names)', { names })
+              .getMany()
+          : [];
+
+      const existingByCode = new Map(existingProducts.map((p) => [p.code, p]));
+      const existingByName = new Map(existingProducts.map((p) => [p.name, p]));
 
       const toCreate: any[] = [];
       const toUpdate: any[] = [];
@@ -150,15 +173,21 @@ export class ProductsService {
       // Separar productos a crear vs actualizar
       productsData.forEach((productData) => {
         const normalizedCode = productData.code.toUpperCase();
+        const normalizedName = productData.name.trim();
         const productPayload = {
           ...productData,
           code: normalizedCode,
+          name: normalizedName,
         };
 
-        if (existingCodesMap.has(normalizedCode)) {
+        const existing =
+          existingByCode.get(normalizedCode) ??
+          existingByName.get(normalizedName);
+
+        if (existing) {
           toUpdate.push({
             ...productPayload,
-            id: existingCodesMap.get(normalizedCode),
+            id: existing.id,
           });
         } else {
           toCreate.push(productPayload);
@@ -187,16 +216,26 @@ export class ProductsService {
         this.logger.log(`Updated ${updated} existing products`);
       }
 
+      // Eliminar productos que ya no están en el Excel, quitándolos de los
+      // kits que los usen y recalculando el precio de esos kits.
+      const { deletedProducts, affectedKits } =
+        await this.deleteProductsNotInCatalog(queryRunner, codes);
+
       await queryRunner.commitTransaction();
 
       return {
         created,
         updated,
+        deleted: deletedProducts.length,
         errors: [],
         summary: {
           total: productsData.length,
           successful: created + updated,
           failed: 0,
+        },
+        details: {
+          deletedProducts,
+          affectedKits,
         },
       };
     } catch (error) {
@@ -206,6 +245,65 @@ export class ProductsService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  // Borra productos que no vinieron en el Excel. Si alguno pertenece a un kit,
+  // se elimina también esa relación (kit_products) y se recalcula el precio del kit.
+  private async deleteProductsNotInCatalog(
+    queryRunner: QueryRunner,
+    codesInExcel: string[],
+  ): Promise<{ deletedProducts: string[]; affectedKits: string[] }> {
+    const productsToDelete =
+      codesInExcel.length > 0
+        ? await queryRunner.manager.find(Product, {
+            where: { code: Not(In(codesInExcel)) },
+          })
+        : await queryRunner.manager.find(Product);
+
+    if (productsToDelete.length === 0) {
+      return { deletedProducts: [], affectedKits: [] };
+    }
+
+    const idsToDelete = productsToDelete.map((p) => p.id);
+
+    const affectedKitProducts = await queryRunner.manager.find(KitProduct, {
+      where: { product: { id: In(idsToDelete) } },
+      relations: { kit: true },
+    });
+
+    const affectedKitIds = [
+      ...new Set(affectedKitProducts.map((kp) => kp.kit.id)),
+    ];
+
+    if (affectedKitProducts.length > 0) {
+      await queryRunner.manager.delete(
+        KitProduct,
+        affectedKitProducts.map((kp) => kp.id),
+      );
+    }
+
+    await queryRunner.manager.delete(Product, idsToDelete);
+    this.logger.log(
+      `Deleted ${idsToDelete.length} products no longer present in the Excel file`,
+    );
+
+    // Recalcular precios de los kits que perdieron algún producto
+    const affectedKitNames: string[] = [];
+    for (const kitId of affectedKitIds) {
+      const kit = await queryRunner.manager.findOne(Kit, {
+        where: { id: kitId },
+        relations: { kitProducts: { product: true } },
+      });
+      if (kit) {
+        await queryRunner.manager.save(Kit, kit);
+        affectedKitNames.push(kit.name);
+      }
+    }
+
+    return {
+      deletedProducts: productsToDelete.map((p) => p.code),
+      affectedKits: affectedKitNames,
+    };
   }
 
   // NUEVO: Buscar producto por código
