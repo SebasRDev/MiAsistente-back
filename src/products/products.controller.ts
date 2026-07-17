@@ -7,14 +7,17 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Res,
   UseInterceptors,
   UploadedFile,
   BadRequestException,
 } from '@nestjs/common';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from 'src/products/dto/update-product.dto';
+import { SyncProductDto } from './dto/sync-product.dto';
 import { ProductsService } from 'src/products/products.service';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Response } from 'express';
 import * as XLSX from 'xlsx';
 import * as fs from 'fs';
 
@@ -33,6 +36,41 @@ interface ExcelRow {
   __EMPTY_9?: string; // Fase de tratamiento
   __EMPTY_10?: string; // Horario
   __EMPTY_11?: string; // Link de imagen
+}
+
+// Columnas del archivo de exportación/importación por id (formato propio,
+// distinto del catálogo de marketing). El orden define el orden de columnas
+// al exportar.
+const PRODUCT_SYNC_HEADERS = [
+  'id',
+  'code',
+  'name',
+  'category',
+  'publicPrice',
+  'efficiency',
+  'profesionalPrice',
+  'actives',
+  'properties',
+  'phase',
+  'time',
+  'image',
+  'weight',
+] as const;
+
+interface ProductSyncRow {
+  id?: string;
+  code?: string;
+  name?: string;
+  category?: string;
+  publicPrice?: number;
+  efficiency?: number;
+  profesionalPrice?: number;
+  actives?: string;
+  properties?: string;
+  phase?: string;
+  time?: string;
+  image?: string;
+  weight?: number;
 }
 
 @Controller('products')
@@ -103,6 +141,142 @@ export class ProductsController {
           weight: idx + 1,
         };
       });
+  }
+
+  // Busca la hoja "FORMULADOR" (case-insensitive) dentro del libro; si no
+  // existe, cae de vuelta a la primera hoja para no romper archivos antiguos.
+  private findProductSheetName(workbook: XLSX.WorkBook): string {
+    const match = workbook.SheetNames.find(
+      (name) => name.trim().toLowerCase() === 'formulador',
+    );
+    return match ?? workbook.SheetNames[0];
+  }
+
+  // Convierte el texto pipe-delimitado de "properties" de vuelta a un array
+  private parsePropertiesList(text?: string): string[] {
+    if (!text) return [];
+    return text
+      .split('|')
+      .map((prop) => prop.trim())
+      .filter((prop) => prop.length > 0);
+  }
+
+  // Mapea las filas del archivo de sincronización (con columna id) a SyncProductDto
+  private mapExcelToSyncProductDto(
+    rawData: ProductSyncRow[],
+  ): SyncProductDto[] {
+    return rawData
+      .filter((row) => row.code && row.name)
+      .map((row, idx) => {
+        return {
+          id: row.id?.toString().trim() || undefined,
+          code: row.code!.toString().trim(),
+          name: row.name!.toString().trim(),
+          category: row.category?.toString().trim() || '',
+          publicPrice: row.publicPrice ?? null,
+          efficiency: row.efficiency ?? null,
+          profesionalPrice: row.profesionalPrice!,
+          actives: row.actives?.toString().trim() || '',
+          properties: this.parsePropertiesList(row.properties),
+          phase: row.phase?.toString().trim() || '',
+          time: row.time?.toString().trim() || '',
+          image: row.image ? row.image.toString().trim() : null,
+          weight: row.weight ?? idx + 1,
+        };
+      });
+  }
+
+  // NUEVO: Descarga todos los productos en un Excel con columna "id", para
+  // luego re-subirlo por /products/import y sincronizar por id en vez de
+  // depender de code/name.
+  @Get('export')
+  async exportProducts(@Res() response: Response) {
+    const products = (await this.productsService.findAll()) ?? [];
+
+    const rows = [...products]
+      .sort((a, b) => a.code.localeCompare(b.code))
+      .map((product) => ({
+        id: product.id,
+        code: product.code,
+        name: product.name,
+        category: product.category,
+        publicPrice: product.publicPrice,
+        efficiency: product.efficiency,
+        profesionalPrice: product.profesionalPrice,
+        actives: product.actives,
+        properties: (product.properties ?? []).join(' | '),
+        phase: product.phase,
+        time: product.time,
+        image: product.image,
+        weight: product.weight,
+      }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows, {
+      header: [...PRODUCT_SYNC_HEADERS],
+    });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'FORMULADOR');
+
+    const buffer = XLSX.write(workbook, {
+      type: 'buffer',
+      bookType: 'xlsx',
+    }) as Buffer;
+
+    const filename = `products-export-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    response.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"`,
+    );
+    response.send(buffer);
+  }
+
+  // NUEVO: Sube el Excel exportado (con columna "id") y sincroniza la BD por
+  // id: filas con id existente se actualizan, filas nuevas (sin id) se crean,
+  // y cualquier producto en BD cuyo id no venga en el archivo se elimina.
+  @Post('import')
+  @UseInterceptors(FileInterceptor('file'))
+  async importProducts(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+
+    try {
+      const workbook = XLSX.readFile(file.path, { type: 'buffer' });
+      const sheetName = this.findProductSheetName(workbook);
+      const worksheet = workbook.Sheets[sheetName];
+      const rawData = XLSX.utils.sheet_to_json<ProductSyncRow>(worksheet);
+
+      const products = this.mapExcelToSyncProductDto(rawData);
+
+      if (products.length === 0) {
+        return {
+          message: 'No valid products found in file',
+          data: [],
+          summary: { total: 0, processed: 0 },
+        };
+      }
+
+      const result = await this.productsService.syncProductsById(products);
+
+      return {
+        message: 'Products synced successfully',
+        result,
+        ...(result.errors.length > 0 && { errors: result.errors }),
+      };
+    } catch (error) {
+      console.error('Error importing products file:', error);
+      throw new BadRequestException(
+        `Error importing products file: ${error.message}`,
+      );
+    } finally {
+      if (file.path) {
+        await this.deleteUploadedFile(file.path);
+      }
+    }
   }
 
   @Post('file')

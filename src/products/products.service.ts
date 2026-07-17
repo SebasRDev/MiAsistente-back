@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from 'src/products/dto/update-product.dto';
+import { SyncProductDto } from './dto/sync-product.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Product } from './entities/product.entity';
 import { Kit } from 'src/kits/entities/kit.entity';
@@ -15,7 +16,7 @@ import { DataSource, In, Not, QueryRunner, Repository } from 'typeorm';
 import { validate as isUUID } from 'uuid';
 
 // Interface para el resultado de operaciones masivas
-interface BulkOperationResult {
+export interface BulkOperationResult {
   created: number;
   updated: number;
   deleted: number;
@@ -247,8 +248,9 @@ export class ProductsService {
     }
   }
 
-  // Borra productos que no vinieron en el Excel. Si alguno pertenece a un kit,
-  // se elimina también esa relación (kit_products) y se recalcula el precio del kit.
+  // Borra productos que no vinieron en el Excel de catálogo (match por código).
+  // Si alguno pertenece a un kit, se elimina también esa relación (kit_products)
+  // y se recalcula el precio del kit.
   private async deleteProductsNotInCatalog(
     queryRunner: QueryRunner,
     codesInExcel: string[],
@@ -260,6 +262,31 @@ export class ProductsService {
           })
         : await queryRunner.manager.find(Product);
 
+    return this.deleteProductsAndCascade(queryRunner, productsToDelete);
+  }
+
+  // Borra productos cuyo id no vino en el archivo de sincronización (match por id).
+  // Mismo efecto en cascada sobre kits que deleteProductsNotInCatalog.
+  private async deleteProductsNotInIds(
+    queryRunner: QueryRunner,
+    idsInFile: string[],
+  ): Promise<{ deletedProducts: string[]; affectedKits: string[] }> {
+    const productsToDelete =
+      idsInFile.length > 0
+        ? await queryRunner.manager.find(Product, {
+            where: { id: Not(In(idsInFile)) },
+          })
+        : await queryRunner.manager.find(Product);
+
+    return this.deleteProductsAndCascade(queryRunner, productsToDelete);
+  }
+
+  // Elimina los productos dados, quitándolos primero de cualquier kit que los
+  // use (para no violar la FK de kit_products) y recalculando el precio de esos kits.
+  private async deleteProductsAndCascade(
+    queryRunner: QueryRunner,
+    productsToDelete: Product[],
+  ): Promise<{ deletedProducts: string[]; affectedKits: string[] }> {
     if (productsToDelete.length === 0) {
       return { deletedProducts: [], affectedKits: [] };
     }
@@ -283,9 +310,7 @@ export class ProductsService {
     }
 
     await queryRunner.manager.delete(Product, idsToDelete);
-    this.logger.log(
-      `Deleted ${idsToDelete.length} products no longer present in the Excel file`,
-    );
+    this.logger.log(`Deleted ${idsToDelete.length} products`);
 
     // Recalcular precios de los kits que perdieron algún producto
     const affectedKitNames: string[] = [];
@@ -304,6 +329,116 @@ export class ProductsService {
       deletedProducts: productsToDelete.map((p) => p.code),
       affectedKits: affectedKitNames,
     };
+  }
+
+  // NUEVO: Sincroniza productos por id (export/import administrativo).
+  // A diferencia de bulkUpsertProducts (que empareja por code/name para el
+  // catálogo de marketing), aquí el id es la única llave: filas con id
+  // existente se actualizan, filas sin id (o con un id que no existe) se
+  // crean como producto nuevo, y cualquier producto en BD cuyo id no venga
+  // en el archivo se elimina.
+  async syncProductsById(
+    productsData: SyncProductDto[],
+  ): Promise<BulkOperationResult> {
+    if (productsData.length === 0) {
+      throw new BadRequestException(
+        'No products provided; refusing to run bulk sync',
+      );
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const idsInFile = productsData
+        .map((p) => p.id)
+        .filter((id): id is string => !!id);
+
+      const existingIds = new Set(
+        idsInFile.length > 0
+          ? (
+              await queryRunner.manager.find(Product, {
+                select: { id: true },
+                where: { id: In(idsInFile) },
+              })
+            ).map((p) => p.id)
+          : [],
+      );
+
+      const toCreate: any[] = [];
+      const toUpdate: any[] = [];
+
+      productsData.forEach((productData) => {
+        const { id, ...rest } = productData;
+        const productPayload = {
+          ...rest,
+          code: rest.code.toUpperCase(),
+          name: rest.name.trim(),
+        };
+
+        if (id && existingIds.has(id)) {
+          toUpdate.push({ ...productPayload, id });
+        } else {
+          toCreate.push(productPayload);
+        }
+      });
+
+      let created = 0;
+      let updated = 0;
+      let createdIds: string[] = [];
+
+      if (toCreate.length > 0) {
+        const insertResult = await queryRunner.manager
+          .createQueryBuilder()
+          .insert()
+          .into(Product)
+          .values(toCreate)
+          .execute();
+        created = toCreate.length;
+        createdIds = insertResult.identifiers.map(
+          (identifier) => identifier.id as string,
+        );
+        this.logger.log(`Created ${created} new products`);
+      }
+
+      if (toUpdate.length > 0) {
+        await queryRunner.manager.save(Product, toUpdate);
+        updated = toUpdate.length;
+        this.logger.log(`Updated ${updated} existing products`);
+      }
+
+      // Ids "a conservar": los que ya existían y siguen en el archivo, más los
+      // recién creados (su id no se conocía antes del insert, así que hay que
+      // sumarlos aquí o el paso de borrado los eliminaría por error).
+      const idsToKeep = [...existingIds, ...createdIds];
+      const { deletedProducts, affectedKits } =
+        await this.deleteProductsNotInIds(queryRunner, idsToKeep);
+
+      await queryRunner.commitTransaction();
+
+      return {
+        created,
+        updated,
+        deleted: deletedProducts.length,
+        errors: [],
+        summary: {
+          total: productsData.length,
+          successful: created + updated,
+          failed: 0,
+        },
+        details: {
+          deletedProducts,
+          affectedKits,
+        },
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error('Bulk sync by id failed:', error);
+      throw new InternalServerErrorException('Failed to process bulk sync');
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   // NUEVO: Buscar producto por código
