@@ -161,7 +161,11 @@ export class ProductsController {
       .filter((prop) => prop.length > 0);
   }
 
-  // Mapea las filas del archivo de sincronización (con columna id) a SyncProductDto
+  // Mapea las filas del archivo de sincronización (con columna id) a SyncProductDto.
+  // El "weight" ignora el valor de la columna del archivo y se recalcula
+  // siempre según el orden de aparición de las filas: la primera fila válida
+  // queda con weight 1, la segunda con 2, etc. Así, reordenar filas en el
+  // Excel y volver a subirlo reordena los productos en la app.
   private mapExcelToSyncProductDto(
     rawData: ProductSyncRow[],
   ): SyncProductDto[] {
@@ -181,20 +185,27 @@ export class ProductsController {
           phase: row.phase?.toString().trim() || '',
           time: row.time?.toString().trim() || '',
           image: row.image ? row.image.toString().trim() : null,
-          weight: row.weight ?? idx + 1,
+          weight: idx + 1,
         };
       });
   }
 
   // NUEVO: Descarga todos los productos en un Excel con columna "id", para
   // luego re-subirlo por /products/import y sincronizar por id en vez de
-  // depender de code/name.
+  // depender de code/name. Se ordena por "weight" actual (no por code) para
+  // que el archivo refleje el orden de despliegue vigente: si se re-sube sin
+  // reordenar filas, el weight de cada producto no cambia.
   @Get('export')
   async exportProducts(@Res() response: Response) {
     const products = (await this.productsService.findAll()) ?? [];
 
     const rows = [...products]
-      .sort((a, b) => a.code.localeCompare(b.code))
+      .sort(
+        (a, b) =>
+          (a.weight ?? Number.MAX_SAFE_INTEGER) -
+            (b.weight ?? Number.MAX_SAFE_INTEGER) ||
+          a.code.localeCompare(b.code),
+      )
       .map((product) => ({
         id: product.id,
         code: product.code,
