@@ -500,10 +500,32 @@ export class ProductsService {
     }
   }
 
+  // Elimina un solo producto. Reusa deleteProductsAndCascade para quitarlo de
+  // cualquier kit que lo use y recalcular el precio de esos kits, evitando la
+  // violación de FK que daría un remove() simple sobre un producto en un kit.
   async remove(id: string) {
     const product = await this.findOne(id);
-    if (product) {
-      await this.productRepository.remove(product);
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const { deletedProducts, affectedKits } =
+        await this.deleteProductsAndCascade(queryRunner, [product]);
+      await queryRunner.commitTransaction();
+
+      return {
+        message: 'Product deleted successfully',
+        deletedProduct: deletedProducts[0],
+        affectedKits,
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error('Failed to delete product:', error);
+      throw new InternalServerErrorException('Failed to delete product');
+    } finally {
+      await queryRunner.release();
     }
   }
 
