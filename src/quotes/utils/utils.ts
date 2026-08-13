@@ -117,8 +117,10 @@ export const calculateQuoteTotals = (
     },
   );
   const profitability =
-    ((totalHome.totalPublic - totalHome.totalToPay) * 100) /
-    totalHome.totalPublic;
+    totalHome.totalToPay !== 0
+      ? ((totalHome.totalPublic - totalHome.totalToPay) * 100) /
+        totalHome.totalToPay
+      : 0;
   return {
     totalHome,
     profitability,
